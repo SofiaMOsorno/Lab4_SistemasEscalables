@@ -18,7 +18,61 @@ The architecture is designed to demonstrate:
 - CloudWatch observability and performance measurements.
 - The performance difference between cache hits and cache misses.
 
-## 2. AWS services used
+## 2. Architecture overview
+
+The deployment has a public entry point and private data services:
+
+```text
+Client / curl / wrk2
+          |
+          v
+Internet Gateway
+          |
+          v
+Public subnets (Availability Zone A and B)
+          |
+          v
+Application Load Balancer :80
+          |
+          v
+Lambda target group
+          |
+          v
+AWS Lambda: Python 3.12
+          |
+          +--------------------> CloudWatch Logs
+          |
+          +--> ElastiCache Redis :6379
+          |       |
+          |       +--> CACHE_HIT: return cached items
+          |
+          +--> Amazon RDS PostgreSQL :5432
+                  |
+                  +--> CACHE_MISS: query items, save result in Redis
+
+Private subnets (Availability Zone A and B)
+```
+
+The ALB is deployed in public subnets so clients can reach it. Lambda,
+PostgreSQL, and Redis use private subnets. RDS and Redis are not publicly
+accessible; their security groups allow connections only from Lambda.
+
+The request path is:
+
+1. A client sends an HTTP request to the ALB DNS endpoint.
+2. The ALB forwards the request to the Lambda target group.
+3. Lambda checks Redis using the `items:v1` cache key.
+4. On a hit, Lambda returns the cached JSON data.
+5. On a miss, Lambda queries PostgreSQL, stores the result in Redis for 300
+   seconds, and returns the data.
+6. Lambda logs cache status, query timing, total response timing, request ID,
+   timestamp, and errors to CloudWatch.
+
+The VPC, subnets, route table, subnet groups, security groups, ALB, Lambda,
+RDS, Redis, IAM role reference, and outputs are created or configured by
+Terraform.
+
+## 3. AWS services used
 
 ### Amazon VPC
 
@@ -160,12 +214,25 @@ This prevents direct public access to the database and cache.
 
 ### IAM
 
-The Lambda execution role includes:
+AWS Academy Learner Lab does not allow this project to create a new IAM role.
+Instead, Terraform reads the preexisting role:
 
-- `AWSLambdaBasicExecutionRole`, which allows Lambda to write logs to
-  CloudWatch.
-- `AWSLambdaVPCAccessExecutionRole`, which allows Lambda to create the elastic
-  network interfaces needed to access resources in the VPC.
+```text
+arn:aws:iam::706113607058:role/LabRole
+```
+
+The Terraform data source looks up the role by name:
+
+```hcl
+data "aws_iam_role" "lab_role" {
+  name = "LabRole"
+}
+```
+
+The Lambda function uses `data.aws_iam_role.lab_role.arn`. The role must
+already contain the permissions required by the lab, including permission to
+write CloudWatch logs and create the elastic network interfaces needed for VPC
+access. This project does not create or attach IAM policies to `LabRole`.
 
 The ALB also receives an explicit Lambda permission allowing it to invoke the
 function through the Lambda target group.
@@ -248,7 +315,7 @@ If an unexpected error occurs, Lambda logs the error and returns HTTP status
 }
 ```
 
-## 4. Terraform files
+## 5. Terraform files
 
 All Terraform infrastructure files are located in the repository root.
 
@@ -310,9 +377,12 @@ Creates:
 
 - Lambda dependency packaging.
 - Lambda ZIP archive.
-- Lambda IAM role.
-- Lambda IAM policy attachments.
+- A data source that reads the existing AWS Academy `LabRole`.
 - Lambda function.
+
+The Lambda function uses the existing role ARN
+`arn:aws:iam::706113607058:role/LabRole`; no new IAM role or IAM policy
+attachment is created by this file.
 
 The packaging step copies `handler.py` and installs the Python dependencies
 from `lambda/requirements.txt` into a build directory.
@@ -363,13 +433,7 @@ Excludes generated files such as:
 The Terraform provider lock file is retained so provider versions can be
 reproduced.
 
-## 5. Deployment
-
-From the repository root, change into the Terraform directory:
-
-```powershell
-
-```
+## 6. Deployment
 
 Initialize the providers:
 
@@ -400,7 +464,7 @@ terraform output rds_endpoint
 terraform output elasticache_endpoint
 ```
 
-## 6. Testing
+## 7. Testing
 
 Test the API with `curl`:
 
@@ -429,7 +493,7 @@ CloudWatch logs can be inspected in the Lambda log group. The logs should show
 the initial database query and subsequent cache hits while the Redis value is
 valid.
 
-## 7. Validation performed
+## 8. Validation performed
 
 Before completing the Terraform files, the following checks were run:
 
@@ -444,7 +508,7 @@ git diff --check
 The Terraform configuration initialized successfully, passed validation and
 format checks, and the Python Lambda handler passed syntax compilation.
 
-## 8. Important lab considerations
+## 9. Important lab considerations
 
 - RDS and Redis are private and cannot be accessed directly from the public
   internet.
@@ -463,7 +527,7 @@ format checks, and the Python Lambda handler passed syntax compilation.
 - When the cache expires after the TTL, the next request becomes a cache miss
   and refreshes Redis from RDS.
 
-## 9. Cleanup
+## 10. Cleanup
 
 Destroy the resources when finished:
 

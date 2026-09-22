@@ -41,7 +41,7 @@ Lab4_SistemasEscalables/
 | `network.tf` | Creates the VPC, subnets, routes, database subnet group, and Redis subnet group. |
 | `security.tf` | Creates security groups for the ALB, Lambda, RDS, and Redis. |
 | `data-services.tf` | Creates the PostgreSQL RDS instance and ElastiCache Redis cluster. |
-| `lambda.tf` | Packages dependencies and creates the Lambda IAM role and function. |
+| `lambda.tf` | Packages dependencies, reads the existing `LabRole`, and creates the Lambda function. |
 | `alb.tf` | Creates the ALB, Lambda target group, listener, and invocation permission. |
 | `outputs.tf` | Exposes the ALB, RDS, Redis, Lambda, and CloudWatch outputs. |
 | `lambda/handler.py` | Implements the Redis-first, PostgreSQL-fallback cache logic. |

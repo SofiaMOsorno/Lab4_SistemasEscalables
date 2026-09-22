@@ -19,32 +19,13 @@ data "archive_file" "lambda" {
   depends_on = [terraform_data.lambda_dependencies]
 }
 
-resource "aws_iam_role" "lambda" {
-  name = "${var.project_name}-lambda-role"
-
-  assume_role_policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [{
-      Effect    = "Allow"
-      Principal = { Service = "lambda.amazonaws.com" }
-      Action    = "sts:AssumeRole"
-    }]
-  })
-}
-
-resource "aws_iam_role_policy_attachment" "lambda_basic" {
-  role       = aws_iam_role.lambda.name
-  policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
-}
-
-resource "aws_iam_role_policy_attachment" "lambda_vpc" {
-  role       = aws_iam_role.lambda.name
-  policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole"
+data "aws_iam_role" "lab_role" {
+  name = "LabRole"
 }
 
 resource "aws_lambda_function" "api" {
   function_name    = "${var.project_name}-api"
-  role             = aws_iam_role.lambda.arn
+  role             = data.aws_iam_role.lab_role.arn
   handler          = "handler.lambda_handler"
   runtime          = "python3.12"
   filename         = data.archive_file.lambda.output_path
@@ -69,8 +50,4 @@ resource "aws_lambda_function" "api" {
     }
   }
 
-  depends_on = [
-    aws_iam_role_policy_attachment.lambda_basic,
-    aws_iam_role_policy_attachment.lambda_vpc,
-  ]
 }
