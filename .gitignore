@@ -1,0 +1,6 @@
+.terraform/
+lambda_build/
+lambda.zip
+lambda/__pycache__/
+terraform.tfvars
+*.tfvars
